@@ -1,24 +1,32 @@
 const c = @cImport({
     @cInclude("SDL2/SDL.h");
+    @cInclude("SDL2/SDL_ttf.h");
 });
 
 const std = @import("std");
 const assert = @import("std").debug.assert;
+
 pub fn lerp(a: f32, b: f32, t: f32) f32 {
     return a + (b - a) * t;
 }
 
 pub fn main() !void {
-    // Initialize SDL and prepare for awesomeness!
+    // Initialize SDL and SDL_ttf
     if (c.SDL_Init(c.SDL_INIT_VIDEO) != 0) {
         c.SDL_Log("Unable to initialize SDL: %s", c.SDL_GetError());
         return error.SDLInitializationFailed;
     }
     defer c.SDL_Quit();
 
+    if (c.TTF_Init() != 0) {
+        c.SDL_Log("Unable to initialize SDL_ttf: %s", c.SDL_GetError());
+        return error.SDLInitializationFailed;
+    }
+    defer c.TTF_Quit();
+
     // Create the game window where the magic will happen
-    const screen = c.SDL_CreateWindow("ZigSDL2", c.SDL_WINDOWPOS_UNDEFINED, c.SDL_WINDOWPOS_UNDEFINED, 720, 480, c.SDL_WINDOW_OPENGL) orelse
-        {
+    // | c.SDL_WINDOW_ALLOW_HIGHDPI you can play around with this on a mac
+    const screen = c.SDL_CreateWindow("ZigSDL2", c.SDL_WINDOWPOS_UNDEFINED, c.SDL_WINDOWPOS_UNDEFINED, 720, 480, c.SDL_WINDOW_OPENGL | c.SDL_RENDERER_PRESENTVSYNC) orelse {
         c.SDL_Log("Unable to create window: %s", c.SDL_GetError());
         return error.SDLInitializationFailed;
     };
@@ -31,11 +39,15 @@ pub fn main() !void {
     };
     defer c.SDL_DestroyRenderer(renderer);
 
+    // Load the Roboto-Regular font
+    const font = c.TTF_OpenFont("src/Roboto/Roboto-Regular.ttf", 24);
+    if (font == null) {
+        c.SDL_Log("Unable to load font: %s", c.TTF_GetError());
+        return error.FontLoadingFailed;
+    }
+    defer c.TTF_CloseFont(font);
+
     // Prepare the stage for our main actors (just a red square)
-    // update: I could've at least set the square color to match the zig logo
-    // update: I did it.
-    // update: I undid it.
-    // update: I did it again.
     var quit = false;
     const SquareSize = 50;
     var square_x: i32 = 0;
@@ -115,6 +127,16 @@ pub fn main() !void {
         const square_rect = c.SDL_Rect{ .x = square_x, .y = square_y, .w = SquareSize, .h = SquareSize };
         _ = c.SDL_SetRenderDrawColor(renderer, zig_logo_color_im_undecisive_help_me.r, zig_logo_color_im_undecisive_help_me.g, zig_logo_color_im_undecisive_help_me.b, zig_logo_color_im_undecisive_help_me.a);
         _ = c.SDL_RenderFillRect(renderer, &square_rect);
+
+        // Render text using the loaded font
+        const textSurface = c.TTF_RenderText_Blended_Wrapped(font, "Hello, ZigSDL2!\n(press LShift to sprint)", zig_logo_color_im_undecisive_help_me, 500);
+        defer c.SDL_FreeSurface(textSurface);
+
+        const textTexture = c.SDL_CreateTextureFromSurface(renderer, textSurface);
+        defer c.SDL_DestroyTexture(textTexture);
+
+        const textRect = c.SDL_Rect{ .x = 10, .y = 10, .w = 300, .h = 100 };
+        _ = c.SDL_RenderCopy(renderer, textTexture, null, &textRect);
 
         c.SDL_RenderPresent(renderer);
 
